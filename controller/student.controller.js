@@ -8,6 +8,8 @@ const jwtSecret = process.env.JWTSECRET;
 
 const Student = require("../model/student.model");
 const Attendance = require('../model/attendance.model');
+const { buildStudentsSortedByRollPipeline } = require("../utils/studentRollSort");
+
 module.exports = {
 
    
@@ -30,13 +32,23 @@ module.exports = {
             const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
             const limit = Math.max(parseInt(req.query.limit, 10) || 10, 1);
             const skip = (page - 1) * limit;
+            const sortByRoll = String(req.query.sortBy || "").toLowerCase() === "roll";
 
             const [filteredStudents, total] = await Promise.all([
-                Student.find(filterQuery)
-                    .populate("student_class")
-                    .sort({ createdAt: -1 })
-                    .skip(hasPagination ? skip : 0)
-                    .limit(hasPagination ? limit : 0),
+                sortByRoll
+                    ? Student.aggregate(
+                        buildStudentsSortedByRollPipeline(
+                            filterQuery,
+                            skip,
+                            limit,
+                            Boolean(hasPagination)
+                        )
+                    )
+                    : Student.find(filterQuery)
+                        .populate("student_class")
+                        .sort({ createdAt: -1 })
+                        .skip(hasPagination ? skip : 0)
+                        .limit(hasPagination ? limit : 0),
                 Student.countDocuments(filterQuery)
             ]);
 
@@ -62,58 +74,91 @@ module.exports = {
         const form = new formidable.IncomingForm();
 
         form.parse(req, (err, fields, files) => {
-             if (!fields.roll_number || !fields.roll_number[0]) {
-                return res.status(400).json({ success: false, message: "Roll number is required." })
+            const name = String(fields.name?.[0] ?? "").trim();
+            const roll = fields.roll_number?.[0];
+            const email = fields.email?.[0];
+            const studentClass = fields.student_class?.[0];
+            const plainPassword = fields.password?.[0];
+
+            if (!name) {
+                return res.status(400).json({ success: false, message: "Name is required." });
             }
-            Student.find({ email: fields.email[0] }).then(resp => {
+            if (!roll) {
+                return res.status(400).json({ success: false, message: "Roll number is required." });
+            }
+            if (!email) {
+                return res.status(400).json({ success: false, message: "Email is required." });
+            }
+            if (!studentClass) {
+                return res.status(400).json({ success: false, message: "Class is required." });
+            }
+            if (!plainPassword) {
+                return res.status(400).json({ success: false, message: "Password is required." });
+            }
+
+            const address = String(fields.address?.[0] ?? "").trim();
+            const aadharDigits = String(fields.aadhar_number?.[0] ?? "").replace(/\D/g, "");
+            if (aadharDigits.length > 0 && aadharDigits.length !== 12) {
+                return res.status(400).json({ success: false, message: "Aadhar must be 12 digits or left empty." });
+            }
+
+            Student.find({ email }).then((resp) => {
                 if (resp.length > 0) {
-                    res.status(500).json({ success: false, message: "Email Already Exist!" })
-                } else {
-
-                    const photo = files.image?.[0];
-                    if (!photo) {
-                        return res.status(400).json({ success: false, message: "Student image is required." });
-                    }
-                    uploadStudentImage(photo.filepath, photo.mimetype).then((uploadResult) => {
-
-                        var salt = bcrypt.genSaltSync(10);
-                        var hashPassword = bcrypt.hashSync(fields.password[0], salt);
-
-                        console.log(fields,"Fields")
-                        const newStudent = new Student({
-                            email: fields.email[0],
-                            name: fields.name[0],
-                            roll_number: fields.roll_number[0],
-                            student_class:fields.student_class[0],
-                            guardian:fields.guardian[0],
-                            guardian_phone:fields.guardian_phone[0],
-                            age: fields.age[0],
-                            gender: fields.gender[0],
-
-                            student_image: uploadResult.secure_url,
-                            student_image_public_id: uploadResult.public_id,
-                            password: hashPassword,
-                            school:req.user.id
-
-                        })
-
-                        newStudent.save().then(savedData => {
-                            console.log("Date saved", savedData);
-                            res.status(200).json({ success: true, data: savedData, message:"Student is Registered Successfully." })
-                        }).catch(e => {
-                            console.log("ERRORO in Register", e)
-                            res.status(500).json({ success: false, message: "Failed Registration." })
-                        })
-                        }).catch((uploadError) => {
-                        console.log("Cloudinary upload error", uploadError);
-                        res.status(500).json({ success: false, message: "Failed to upload student image." })
-
-                    })
-
-
+                    res.status(500).json({ success: false, message: "Email Already Exist!" });
+                    return;
                 }
-            })
 
+                const salt = bcrypt.genSaltSync(10);
+                const hashPassword = bcrypt.hashSync(plainPassword, salt);
+
+                const buildPayload = (imageUrl, publicId) => ({
+                    email,
+                    name,
+                    roll_number: roll,
+                    address,
+                    aadhar_number: aadharDigits.length === 12 ? aadharDigits : "",
+                    student_class: studentClass,
+                    guardian: fields.guardian?.[0] ?? "",
+                    guardian_phone: fields.guardian_phone?.[0] ?? "",
+                    age: fields.age?.[0] != null && fields.age[0] !== "" ? String(fields.age[0]) : "",
+                    gender: fields.gender?.[0] ?? "",
+                    student_image: imageUrl || "",
+                    student_image_public_id: publicId || undefined,
+                    password: hashPassword,
+                    school: req.user.id,
+                });
+
+                const saveStudent = (imageUrl, publicId) => {
+                    const newStudent = new Student(buildPayload(imageUrl, publicId));
+                    newStudent
+                        .save()
+                        .then((savedData) => {
+                            res.status(200).json({
+                                success: true,
+                                data: savedData,
+                                message: "Student is Registered Successfully.",
+                            });
+                        })
+                        .catch((e) => {
+                            console.log("ERRORO in Register", e);
+                            res.status(500).json({ success: false, message: "Failed Registration." });
+                        });
+                };
+
+                const photo = files.image?.[0];
+                if (photo) {
+                    uploadStudentImage(photo.filepath, photo.mimetype)
+                        .then((uploadResult) => {
+                            saveStudent(uploadResult.secure_url, uploadResult.public_id);
+                        })
+                        .catch((uploadError) => {
+                            console.log("Cloudinary upload error", uploadError);
+                            res.status(500).json({ success: false, message: "Failed to upload student image." });
+                        });
+                } else {
+                    saveStudent("", undefined);
+                }
+            });
         })
 
 
@@ -206,16 +251,46 @@ updateStudentWithId : async (req, res) => {
       }
       try {
         const { id } = req.params;
-        const student = await Student.findById(id);
+        const schoolId = req.user.schoolId;
+        const student = await Student.findOne({ _id: id, school: schoolId });
   
         if (!student) {
           return res.status(404).json({ message: "Student not found." });
         }
+
+        const name = String(fields.name?.[0] ?? "").trim();
+        const email = String(fields.email?.[0] ?? "").trim();
+        const roll = fields.roll_number?.[0];
+        const cls = fields.student_class?.[0];
+        const rawPassword = fields.password?.[0];
+
+        if (!name) return res.status(400).json({ message: "Name is required." });
+        if (!email) return res.status(400).json({ message: "Email is required." });
+        if (!roll) return res.status(400).json({ message: "Roll number is required." });
+        if (!cls) return res.status(400).json({ message: "Class is required." });
+        if (rawPassword == null || String(rawPassword).length === 0) {
+          return res.status(400).json({ message: "Password is required." });
+        }
   
-        // Update text fields
         Object.keys(fields).forEach((field) => {
+          if (field === "password") return;
           student[field] = fields[field][0];
         });
+
+        const pwdStr = String(rawPassword);
+        if (/^\$2[aby]\$/.test(pwdStr)) {
+          student.password = pwdStr;
+        } else {
+          student.password = bcrypt.hashSync(pwdStr, bcrypt.genSaltSync(10));
+        }
+
+        if (fields.aadhar_number) {
+          const aadharDigits = String(fields.aadhar_number[0] ?? "").replace(/\D/g, "");
+          if (aadharDigits.length > 0 && aadharDigits.length !== 12) {
+            return res.status(400).json({ message: "Aadhar must be 12 digits or left empty." });
+          }
+          student.aadhar_number = aadharDigits.length === 12 ? aadharDigits : "";
+        }
   
         // Handle image file if provided
         if (files.image) {

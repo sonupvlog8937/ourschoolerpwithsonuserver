@@ -157,12 +157,23 @@ module.exports = {
     },
     getAttendeeTeacher: async(req, res)=>{
         try {
-            let attendeeClass =await Class.find({attendee:req.user.id});
-           attendeeClass = attendeeClass.map(x=>{
-          return {class_num:x.class_num,class_text: x.class_text,classId: x._id}
-        })
-            res.status(200).json(attendeeClass)
-            
+            const teacherId = req.user.id;
+            const schoolId = req.user.schoolId;
+            let attendeeClass = await Class.find({
+                school: schoolId,
+                $or: [
+                    { attendee: teacherId },
+                    { "asignSubTeach.teacher": teacherId },
+                ],
+            })
+                .sort({ class_num: 1, class_text: 1 })
+                .lean();
+            attendeeClass = attendeeClass.map((x) => ({
+                class_num: x.class_num,
+                class_text: x.class_text,
+                classId: x._id,
+            }));
+            res.status(200).json(attendeeClass);
         } catch (error) {
             console.log("Error in getting attendee", error);
             res.status(500).json({success:false, message:"Server Error in getting  Attendee. Try later"})

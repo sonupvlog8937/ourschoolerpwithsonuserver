@@ -27,6 +27,9 @@ exports.getTeacherPeriods = async (req, res) => {
   try {
     const schoolId = req.user.schoolId;
     const { teacherId } = req.params;
+    if (req.user.role === 'TEACHER' && String(req.user.id) !== String(teacherId)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
     const periods = await Period.find({ teacher: teacherId,school:schoolId }).populate('class').populate('subject');
     res.status(200).json({ periods });
   } catch (error) {

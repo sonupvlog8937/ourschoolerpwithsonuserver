@@ -8,6 +8,7 @@ const jwt = require('jsonwebtoken');
 const jwtSecret = process.env.JWTSECRET;
 
 const Teacher = require("../model/teacher.model");
+const School = require("../model/school.model");
 
 function ensureDirSync(dirPath) {
     if (!fs.existsSync(dirPath)) {
@@ -97,43 +98,64 @@ module.exports = {
 
     },
     loginTeacher: async (req, res) => {
-        Teacher.find({ email: req.body.email }).then(resp => {
-            if (resp.length > 0) {
-                const isAuth = bcrypt.compareSync(req.body.password, resp[0].password);
-                if (isAuth) {   
-                    const token = jwt.sign(
-                        {
-                            id: resp[0]._id,
-                            schoolId:resp[0].school,
-                            name: resp[0].name,
-                            image_url: resp[0].teacher_image,
-                            role: 'TEACHER'
-                        }, jwtSecret );
-
-                       res.header("Authorization", token);
-                       console.log("Success")
-                   res.status(200).json({ success: true, message: "Success Login",  user: { id: resp[0]._id, username: resp[0].username, image_url: resp[0].teacher_image, role: 'TEACHER' } })
-                }else {
-                    res.status(401).json({ success: false, message: "Password doesn't match." })
-                }
-
-            } else {
-                res.status(401).json({ success: false, message: "Email not registerd." })
+        try {
+            const resp = await Teacher.find({ email: req.body.email });
+            if (resp.length === 0) {
+                return res.status(401).json({ success: false, message: "Email not registerd." });
             }
-        })
+            const isAuth = bcrypt.compareSync(req.body.password, resp[0].password);
+            if (!isAuth) {
+                return res.status(401).json({ success: false, message: "Password doesn't match." });
+            }
+
+            const schoolDoc = await School.findById(resp[0].school).select("school_name").lean();
+            const schoolName = schoolDoc?.school_name || "";
+
+            const token = jwt.sign(
+                {
+                    id: resp[0]._id,
+                    schoolId: resp[0].school,
+                    name: resp[0].name,
+                    school_name: schoolName,
+                    image_url: resp[0].teacher_image,
+                    role: "TEACHER",
+                },
+                jwtSecret
+            );
+
+            res.header("Authorization", token);
+            return res.status(200).json({
+                success: true,
+                message: "Success Login",
+                user: {
+                    id: resp[0]._id,
+                    username: resp[0].username,
+                    school_name: schoolName,
+                    image_url: resp[0].teacher_image,
+                    role: "TEACHER",
+                },
+            });
+        } catch (err) {
+            console.log("loginTeacher error", err);
+            return res.status(500).json({ success: false, message: "Server error" });
+        }
     },
     getTeacherOwnDetails: async(req, res)=>{
-        const id = req.user.id;
-        Teacher.findOne({_id:id, school:req.user.schoolId}).then(resp=>{
-            if(resp){
-                res.status(200).json({success:true, data:resp})
-            }else {
-                res.status(500).json({ success: false, message: "Teacher data not Available" })
+        try {
+            const id = req.user.id;
+            const resp = await Teacher.findOne({ _id: id, school: req.user.schoolId }).populate(
+                "school",
+                "school_name school_image owner_name"
+            );
+            if (resp) {
+                res.status(200).json({ success: true, data: resp });
+            } else {
+                res.status(500).json({ success: false, message: "Teacher data not Available" });
             }
-        }).catch(e=>{
-            console.log("Error in getTeacherWithId", e)
-            res.status(500).json({ success: false, message: "Error in getting  Teacher Data" })
-        })
+        } catch (e) {
+            console.log("Error in getTeacherOwnDetails", e);
+            res.status(500).json({ success: false, message: "Error in getting  Teacher Data" });
+        }
     },
     getTeacherWithId: async(req, res)=>{
         const id = req.params.id;

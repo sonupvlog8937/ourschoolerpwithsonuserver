@@ -3,6 +3,10 @@ const Attendance = require("../model/attendance.model");
 const Student = require("../model/student.model");
 const Class = require("../model/class.model");
 const moment = require("moment");
+const {
+  buildStudentsSortedByRollPipeline,
+  sortStudentsByRollInMemory,
+} = require("../utils/studentRollSort");
 
 const toSafeObjectId = (id) => {
   if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
@@ -123,12 +127,9 @@ module.exports = {
             .sort({ class_num: 1, class_text: 1 })
             .lean(),
           Student.countDocuments(studentFilter),
-          Student.find(studentFilter)
-            .populate("student_class")
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean(),
+          Student.aggregate(
+            buildStudentsSortedByRollPipeline(studentFilter, skip, limit, true)
+          ),
           Student.countDocuments({ school: schoolObjectId }),
           Attendance.findOne({ school: schoolObjectId })
             .sort({ date: -1, createdAt: -1 })
@@ -365,36 +366,42 @@ module.exports = {
     }
 
     try {
-      const classData = await Class.findOne({
-        _id: classObjectId,
-        school: schoolObjectId,
-        attendee: teacherObjectId,
-      })
+      const isSchoolRole = req.user.role === "SCHOOL";
+      const classQuery = isSchoolRole
+        ? { _id: classObjectId, school: schoolObjectId }
+        : {
+            _id: classObjectId,
+            school: schoolObjectId,
+            $or: [
+              { attendee: teacherObjectId },
+              { "asignSubTeach.teacher": teacherObjectId },
+            ],
+          };
+
+      const classData = await Class.findOne(classQuery)
         .select(["class_text", "class_num"])
         .lean();
 
       if (!classData) {
         return res
           .status(404)
-          .json({ success: false, message: "Class not found for this teacher." });
+          .json({
+            success: false,
+            message: isSchoolRole
+              ? "Class not found for this school."
+              : "Class not found or you are not assigned to this class.",
+          });
       }
 
-      const students = await Student.find({
-        school: schoolObjectId,
-        student_class: classObjectId,
+      // Use mongoose find (casts query like school routes). Raw aggregate $match does NOT cast,
+      // so mixed string/ObjectId in DB or JWT could yield zero rows.
+      let students = await Student.find({
+        school: req.user.schoolId,
+        student_class: req.params.classId,
       })
-        .select([
-          "name",
-          "roll_number",
-          "guardian_phone",
-          "guardian",
-          "gender",
-          "age",
-          "email",
-          "student_class",
-        ])
-        .sort({ name: 1 })
+        .select("name roll_number guardian_phone guardian gender age email student_class")
         .lean();
+      students = sortStudentsByRollInMemory(students);
 
       const studentIds = students.map((student) => student._id);
       const totalStudents = students.length;
