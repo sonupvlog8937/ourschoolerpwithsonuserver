@@ -13,6 +13,41 @@ const toSafeObjectId = (id) => {
   return new mongoose.Types.ObjectId(id);
 };
 
+/** One calendar day [start, end) in UTC for YYYY-MM-DD strings (matches client dates). */
+const utcDayBoundsFromYmdString = (ymd) => {
+  const start = moment.utc(String(ymd).trim(), "YYYY-MM-DD", true).startOf("day");
+  if (!start.isValid()) return null;
+  const endExclusive = start.clone().add(1, "day").startOf("day");
+  return { start: start.toDate(), endExclusive: endExclusive.toDate() };
+};
+
+/** Normalize attendance day to UTC midnight for that calendar date. */
+const normalizeAttendanceDayInput = (dateInput) => {
+  if (dateInput == null || dateInput === "") {
+    return moment.utc().startOf("day").toDate();
+  }
+  const s = String(dateInput).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return moment.utc(s, "YYYY-MM-DD").startOf("day").toDate();
+  }
+  const parsed = new Date(dateInput);
+  if (!Number.isNaN(parsed.getTime())) {
+    const ymd = moment.utc(parsed).format("YYYY-MM-DD");
+    return moment.utc(ymd, "YYYY-MM-DD").startOf("day").toDate();
+  }
+  return moment.utc().startOf("day").toDate();
+};
+
+/** Bounds for listing/checking attendance for req.query.date or today's UTC calendar date. */
+const utcBoundsForQueryDate = (req) => {
+  const raw = req.query?.date;
+  const ymd =
+    raw && /^\d{4}-\d{2}-\d{2}$/.test(String(raw))
+      ? String(raw).trim()
+      : moment.utc().format("YYYY-MM-DD");
+  return utcDayBoundsFromYmdString(ymd);
+};
+
 const buildSummaryFromStatusBuckets = (statusBuckets = []) => {
   const presentCount =
     statusBuckets.find((item) => item._id === "Present")?.count || 0;
@@ -32,7 +67,7 @@ module.exports = {
     try {
       const attendance = new Attendance({
         student: studentId,
-        date,
+        date: normalizeAttendanceDayInput(date),
         status,
         class: classId,
         school: schoolId,
@@ -359,7 +394,10 @@ module.exports = {
     const schoolObjectId = toSafeObjectId(req.user.schoolId);
     const teacherObjectId = toSafeObjectId(req.user.id);
     const classObjectId = toSafeObjectId(req.params.classId);
-    const requestedDate = req.query.date ? moment(req.query.date) : moment();
+    const bounds =
+      req.query.date && /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date))
+        ? utcDayBoundsFromYmdString(String(req.query.date).trim())
+        : utcDayBoundsFromYmdString(moment.utc().format("YYYY-MM-DD"));
 
     if (!schoolObjectId || !teacherObjectId || !classObjectId) {
       return res.status(400).json({ success: false, message: "Invalid request data." });
@@ -406,8 +444,11 @@ module.exports = {
       const studentIds = students.map((student) => student._id);
       const totalStudents = students.length;
 
-      const startOfDay = requestedDate.startOf("day").toDate();
-      const endOfDay = requestedDate.endOf("day").toDate();
+      if (!bounds) {
+        return res.status(400).json({ success: false, message: "Invalid date." });
+      }
+      const startOfDay = bounds.start;
+      const endExclusive = bounds.endExclusive;
 
       let latestStatusRows = [];
       let overallRows = [];
@@ -420,7 +461,7 @@ module.exports = {
                 school: schoolObjectId,
                 class: classObjectId,
                 student: { $in: studentIds },
-                date: { $gte: startOfDay, $lte: endOfDay },
+                date: { $gte: startOfDay, $lt: endExclusive },
               },
             },
             { $sort: { createdAt: -1 } },
@@ -524,15 +565,19 @@ module.exports = {
 
   checkAttendance: async (req, res) => {
     try {
-      const today = moment().startOf("day");
       const schoolId = req.user.schoolId;
+      const bounds = utcBoundsForQueryDate(req);
+
+      if (!bounds) {
+        return res.status(400).json({ success: false, message: "Invalid date." });
+      }
 
       const attendanceForToday = await Attendance.findOne({
         class: req.params.classId,
         school: schoolId,
         date: {
-          $gte: today.toDate(),
-          $lt: moment(today).endOf("day").toDate(),
+          $gte: bounds.start,
+          $lt: bounds.endExclusive,
         },
       });
 
@@ -541,7 +586,10 @@ module.exports = {
           .status(200)
           .json({ attendanceTaken: true, message: "Attendance already taken for today" });
       }
-      return res.status(200).json({ message: "No attendance taken yet for today" });
+      return res.status(200).json({
+        attendanceTaken: false,
+        message: "No attendance taken yet for today",
+      });
     } catch (error) {
       console.error("Error checking attendance:", error);
       return res.status(500).json({ message: "Server error", error });
