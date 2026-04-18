@@ -8,6 +8,17 @@ const jwt = require('jsonwebtoken');
 const jwtSecret = process.env.JWTSECRET;
 
 const School = require("../model/school.model");
+
+function ensureDirSync(dirPath) {
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+    }
+}
+
+function getSchoolUploadDir() {
+    // This repo's frontend is in `client/`, so store uploads there.
+    return path.join(__dirname, "../../client/public/images/uploaded/school");
+}
 module.exports = {
 
     getAllSchools: async(req,res)=>{
@@ -33,7 +44,9 @@ module.exports = {
                     let oldPath = photo.filepath;
                     let originalFileName = photo.originalFilename.replace(" ", "_")
 
-                    let newPath = path.join(__dirname, '../../frontend/public/images/uploaded/school', '/', originalFileName)
+                    const uploadDir = getSchoolUploadDir();
+                    ensureDirSync(uploadDir);
+                    let newPath = path.join(uploadDir, "/", originalFileName)
 
                     let photoData = fs.readFileSync(oldPath);
                     fs.writeFile(newPath, photoData, function (err) {
@@ -116,8 +129,11 @@ module.exports = {
     },
 
     updateSchoolWithId: async (req, res) => {
+        const uploadDir = getSchoolUploadDir();
+        ensureDirSync(uploadDir);
+
         const form =new formidable.IncomingForm({ multiples: false,
-         uploadDir: path.join(__dirname, '../../frontend/public/images/uploaded/school'), keepExtensions: true });
+         uploadDir, keepExtensions: true });
         form.parse(req, async (err, fields, files) => {
             console.log(fields)
           if (err) {
@@ -140,7 +156,7 @@ module.exports = {
             // Handle image file if provided
             if (files.image) {
               // Delete the old image if it exists
-              const oldImagePath = path.join(__dirname, '../../frontend/public/images/uploaded/school',  school.school_image);
+              const oldImagePath = path.join(uploadDir, school.school_image);
                
               if (school.school_image && fs.existsSync(oldImagePath)) {
                 fs.unlink(oldImagePath, (unlinkErr) => {
@@ -151,7 +167,7 @@ module.exports = {
               // Set the new image filename            
               let filepath = files.image[0].filepath;
               const originalFileName = path.basename(files.image[0].originalFilename.replace(" ", "_"));
-              let newPath = path.join(__dirname, '../../frontend/public/images/uploaded/school', '/', originalFileName);
+              let newPath = path.join(uploadDir, "/", originalFileName);
               let photoData = fs.readFileSync(filepath);
               
              fs.writeFileSync(newPath, photoData);

@@ -8,6 +8,16 @@ const jwt = require('jsonwebtoken');
 const jwtSecret = process.env.JWTSECRET;
 
 const Teacher = require("../model/teacher.model");
+
+function ensureDirSync(dirPath) {
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+    }
+}
+
+function getTeacherUploadDir() {
+    return path.join(__dirname, "../../client/public/images/uploaded/teacher");
+}
 module.exports = {
 
     getTeacherWithQuery: async(req, res)=>{
@@ -34,6 +44,8 @@ module.exports = {
     registerTeacher: async (req, res) => {
         const form = new formidable.IncomingForm();
         const schoolId = req.user.schoolId;
+        const uploadDir = getTeacherUploadDir();
+        ensureDirSync(uploadDir);
         form.parse(req, (err, fields, files) => {
             Teacher.find({ email: fields.email[0] }).then(resp => {
                 if (resp.length > 0) {
@@ -43,8 +55,7 @@ module.exports = {
                     const photo = files.image[0];
                     let oldPath = photo.filepath;
                     let originalFileName = photo.originalFilename.replace(" ", "_")
-
-                    let newPath = path.join(__dirname, '../../frontend/public/images/uploaded/teacher', '/', originalFileName)
+                    let newPath = path.join(uploadDir, originalFileName)
 
                     let photoData = fs.readFileSync(oldPath);
                     fs.writeFile(newPath, photoData, function (err) {
@@ -154,7 +165,9 @@ module.exports = {
 
     // },
     updateTeacherWithId: async (req, res) => {
-        const form =new formidable.IncomingForm({ multiples: false, uploadDir: path.join(__dirname, '../../frontend/public/images/uploaded/teacher'), keepExtensions: true });
+        const uploadDir = getTeacherUploadDir();
+        ensureDirSync(uploadDir);
+        const form =new formidable.IncomingForm({ multiples: false, uploadDir, keepExtensions: true });
       
         form.parse(req, async (err, fields, files) => {
           if (err) {
@@ -176,7 +189,7 @@ module.exports = {
             // Handle image file if provided
             if (files.image) {
               // Delete the old image if it exists
-              const oldImagePath = path.join(__dirname, '../../frontend/public/images/uploaded/teacher',  teacher.teacher_image);
+              const oldImagePath = path.join(uploadDir,  teacher.teacher_image);
                
               if (teacher.teacher_image && fs.existsSync(oldImagePath)) {
                 fs.unlink(oldImagePath, (unlinkErr) => {
@@ -188,7 +201,7 @@ module.exports = {
             
               let filepath = files.image[0].filepath;
               const originalFileName = path.basename(files.image[0].originalFilename.replace(" ", "_"));
-              let newPath = path.join(__dirname, '../../frontend/public/images/uploaded/teacher', '/', originalFileName)
+              let newPath = path.join(uploadDir, originalFileName)
     
               let photoData = fs.readFileSync(filepath);
               

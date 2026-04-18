@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 
 const studentSchema = new mongoose.Schema({
     school:{type:mongoose.Schema.ObjectId, ref:'School'},
+    roll_number:{type:String, default:""},
     email:{type:String, required:true},
     name:{type:String, required:true},
     student_class:{type:mongoose.Schema.ObjectId, ref:"Class"},

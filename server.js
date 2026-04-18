@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser  = require("cookie-parser");
 const mongoose = require("mongoose");
+const path = require("path");
 
 // ROUTERS
 const schoolRouter = require("./router/school.router")
@@ -26,6 +27,9 @@ app.use(express.urlencoded({extended:true}));
 app.use(cookieParser());
 const corsOptions = {exposedHeaders:"Authorization"}
 app.use(cors(corsOptions));
+
+// Serve uploaded images (saved in client/public/images)
+app.use("/images", express.static(path.join(__dirname, "../client/public/images")));
 
 // MONGODB CONNECTION
 mongoose.connect(process.env.MONGODB).then(db=>{

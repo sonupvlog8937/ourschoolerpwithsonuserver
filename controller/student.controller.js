@@ -62,6 +62,9 @@ module.exports = {
         const form = new formidable.IncomingForm();
 
         form.parse(req, (err, fields, files) => {
+             if (!fields.roll_number || !fields.roll_number[0]) {
+                return res.status(400).json({ success: false, message: "Roll number is required." })
+            }
             Student.find({ email: fields.email[0] }).then(resp => {
                 if (resp.length > 0) {
                     res.status(500).json({ success: false, message: "Email Already Exist!" })
@@ -80,6 +83,7 @@ module.exports = {
                         const newStudent = new Student({
                             email: fields.email[0],
                             name: fields.name[0],
+                            roll_number: fields.roll_number[0],
                             student_class:fields.student_class[0],
                             guardian:fields.guardian[0],
                             guardian_phone:fields.guardian_phone[0],
