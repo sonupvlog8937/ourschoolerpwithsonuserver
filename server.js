@@ -77,35 +77,35 @@ app.listen(PORT, ()=>{
  * - Set KEEP_ALIVE_URL to your deployed health URL, e.g. https://your-app.onrender.com/api/health
  * - Optionally set KEEP_ALIVE_INTERVAL_MS (default 840000 = 14min)
  */
-const keepAliveUrl = process.env.KEEP_ALIVE_URL;
-const keepAliveIntervalMs = Math.max(
-  parseInt(process.env.KEEP_ALIVE_INTERVAL_MS || "840000", 10) || 840000,
-  60000
-);
+// const keepAliveUrl = process.env.KEEP_ALIVE_URL;
+// const keepAliveIntervalMs = Math.max(
+//   parseInt(process.env.KEEP_ALIVE_INTERVAL_MS || "840000", 10) || 840000,
+//   60000
+// );
 
-if (keepAliveUrl) {
-  const { request } = keepAliveUrl.startsWith("https:")
-    ? require("https")
-    : require("http");
+// if (keepAliveUrl) {
+//   const { request } = keepAliveUrl.startsWith("https:")
+//     ? require("https")
+//     : require("http");
 
-  setInterval(() => {
-    try {
-      const req = request(
-        keepAliveUrl,
-        { method: "GET", timeout: 15000, headers: { "User-Agent": "keep-alive" } },
-        (resp) => {
-          // drain data to free socket
-          resp.on("data", () => {});
-          resp.on("end", () => {});
-        }
-      );
-      req.on("timeout", () => req.destroy(new Error("keep-alive timeout")));
-      req.on("error", () => {});
-      req.end();
-    } catch {
-      // ignore
-    }
-  }, keepAliveIntervalMs).unref?.();
+//   setInterval(() => {
+//     try {
+//       const req = request(
+//         keepAliveUrl,
+//         { method: "GET", timeout: 15000, headers: { "User-Agent": "keep-alive" } },
+//         (resp) => {
+//           // drain data to free socket
+//           resp.on("data", () => {});
+//           resp.on("end", () => {});
+//         }
+//       );
+//       req.on("timeout", () => req.destroy(new Error("keep-alive timeout")));
+//       req.on("error", () => {});
+//       req.end();
+//     } catch {
+//       // ignore
+//     }
+//   }, keepAliveIntervalMs).unref?.();
 
-  console.log(`[keep-alive] enabled: ${keepAliveUrl} every ${keepAliveIntervalMs}ms`);
-}
+//   console.log(`[keep-alive] enabled: ${keepAliveUrl} every ${keepAliveIntervalMs}ms`);
+// }
