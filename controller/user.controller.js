@@ -137,8 +137,7 @@ module.exports = {
 
         try {
             res.header("Authorization",  "");
-            "Authorization"
-            res.status(200).json({success:true, messsage:"User Signed Out  Successfully."})
+            res.status(200).json({success:true, message:"User Signed Out  Successfully."})
         } catch (error) {
             console.log("Error in Sign out", error);
             res.status(500).json({success:false, message:"Server Error in Signing Out. Try later"})

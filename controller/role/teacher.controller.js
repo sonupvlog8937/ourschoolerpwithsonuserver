@@ -4,21 +4,13 @@ const fs = require("fs");
 const path = require("path");
 const bcrypt = require("bcryptjs")
 const jwt = require('jsonwebtoken');
+const { uploadToCloudinary, deleteFromCloudinary } = require("../../utils/cloudinaryUpload");
 
 const jwtSecret = process.env.JWTSECRET;
 
-const Teacher = require("../model/teacher.model");
-const School = require("../model/school.model");
+const Teacher = require("../../model/role/teacher.model");
+const School = require("../../model/role/school.model");
 
-function ensureDirSync(dirPath) {
-    if (!fs.existsSync(dirPath)) {
-        fs.mkdirSync(dirPath, { recursive: true });
-    }
-}
-
-function getTeacherUploadDir() {
-    return path.join(__dirname, "../../client/public/images/uploaded/teacher");
-}
 module.exports = {
 
     getTeacherWithQuery: async(req, res)=>{
@@ -45,57 +37,42 @@ module.exports = {
     registerTeacher: async (req, res) => {
         const form = new formidable.IncomingForm();
         const schoolId = req.user.schoolId;
-        const uploadDir = getTeacherUploadDir();
-        ensureDirSync(uploadDir);
-        form.parse(req, (err, fields, files) => {
-            Teacher.find({ email: fields.email[0] }).then(resp => {
-                if (resp.length > 0) {
-                    res.status(500).json({ success: false, message: "Email Already Exist!" })
-                } else {
-
-                    const photo = files.image[0];
-                    let oldPath = photo.filepath;
-                    let originalFileName = photo.originalFilename.replace(" ", "_")
-                    let newPath = path.join(uploadDir, originalFileName)
-
-                    let photoData = fs.readFileSync(oldPath);
-                    fs.writeFile(newPath, photoData, function (err) {
-                        if (err) console.log(err);
-
-                        var salt = bcrypt.genSaltSync(10);
-                        var hashPassword = bcrypt.hashSync(fields.password[0], salt);
-
-                        const newTeacher = new Teacher({
-                            email: fields.email[0],
-                            name: fields.name[0],
-                            qualification:fields.qualification[0],
-                            age: fields.age[0],
-                            gender: fields.gender[0],
-
-                            teacher_image: originalFileName,
-                            password: hashPassword,
-                            school:schoolId
-                         
-                        })
-
-                        newTeacher.save().then(savedData => {
-                            console.log("Date saved", savedData);
-                            res.status(200).json({ success: true, data: savedData, message:"Teacher is Registered Successfully." })
-                        }).catch(e => {
-                            console.log("ERRORO in Register", e)
-                            res.status(500).json({ success: false, message: "Failed Registration." })
-                        })
-
-                    })
-
-
+        
+        form.parse(req, async (err, fields, files) => {
+            try {
+                const existingTeacher = await Teacher.find({ email: fields.email[0] });
+                if (existingTeacher.length > 0) {
+                    return res.status(500).json({ success: false, message: "Email Already Exist!" });
                 }
-            })
 
-        })
+                const photo = files.image[0];
+                let oldPath = photo.filepath;
 
+                // Upload to Cloudinary
+                const imageUrl = await uploadToCloudinary(oldPath, "teacher");
 
+                var salt = bcrypt.genSaltSync(10);
+                var hashPassword = bcrypt.hashSync(fields.password[0], salt);
 
+                const newTeacher = new Teacher({
+                    email: fields.email[0],
+                    name: fields.name[0],
+                    qualification: fields.qualification[0],
+                    age: fields.age[0],
+                    gender: fields.gender[0],
+                    teacher_image: imageUrl,
+                    password: hashPassword,
+                    school: schoolId
+                });
+
+                const savedData = await newTeacher.save();
+                console.log("Data saved", savedData);
+                res.status(200).json({ success: true, data: savedData, message: "Teacher is Registered Successfully." });
+            } catch (e) {
+                console.log("ERROR in Register", e);
+                res.status(500).json({ success: false, message: "Failed Registration." });
+            }
+        });
     },
     loginTeacher: async (req, res) => {
         try {
@@ -171,74 +148,48 @@ module.exports = {
         })
     },
 
-    // updateTeacherWithId: async(req, res)=>{
-       
-    //     try {
-    //         let id = req.params.id;
-    //         console.log(req.body)
-    //         await Teacher.findOneAndUpdate({_id:id},{$set:{...req.body}});
-    //         const TeacherAfterUpdate =await Teacher.findOne({_id:id});
-    //         res.status(200).json({success:true, message:"Teacher Updated", data:TeacherAfterUpdate})
-    //     } catch (error) {
-            
-    //         console.log("Error in updateTeacherWithId", error);
-    //         res.status(500).json({success:false, message:"Server Error in Update Teacher. Try later"})
-    //     }
-
-    // },
     updateTeacherWithId: async (req, res) => {
-        const uploadDir = getTeacherUploadDir();
-        ensureDirSync(uploadDir);
-        const form =new formidable.IncomingForm({ multiples: false, uploadDir, keepExtensions: true });
-      
+        const form = new formidable.IncomingForm({ multiples: false, keepExtensions: true });
+
         form.parse(req, async (err, fields, files) => {
-          if (err) {
-            return res.status(400).json({ message: "Error parsing the form data." });
-          }
-          try {
-            const { id } = req.params;
-            const teacher = await Teacher.findById(id);
-      
-            if (!teacher) {
-              return res.status(404).json({ message: "teacher not found." });
+            if (err) {
+                return res.status(400).json({ message: "Error parsing the form data." });
             }
-      
-            // Update text fields
-            Object.keys(fields).forEach((field) => {
-              teacher[field] = fields[field][0];
-            });
-      
-            // Handle image file if provided
-            if (files.image) {
-              // Delete the old image if it exists
-              const oldImagePath = path.join(uploadDir,  teacher.teacher_image);
-               
-              if (teacher.teacher_image && fs.existsSync(oldImagePath)) {
-                fs.unlink(oldImagePath, (unlinkErr) => {
-                  if (unlinkErr) console.log("Error deleting old image:", unlinkErr);
-                });
-              }
-      
-              // Set the new image filename
             
-              let filepath = files.image[0].filepath;
-              const originalFileName = path.basename(files.image[0].originalFilename.replace(" ", "_"));
-              let newPath = path.join(uploadDir, originalFileName)
-    
-              let photoData = fs.readFileSync(filepath);
-              
-             fs.writeFileSync(newPath, photoData);
-              teacher.teacher_image=originalFileName;
+            try {
+                const { id } = req.params;
+                const teacher = await Teacher.findById(id);
+
+                if (!teacher) {
+                    return res.status(404).json({ message: "teacher not found." });
+                }
+
+                // Update text fields
+                Object.keys(fields).forEach((field) => {
+                    teacher[field] = fields[field][0];
+                });
+
+                // Handle image file if provided
+                if (files.image) {
+                    // Delete old image from Cloudinary
+                    if (teacher.teacher_image) {
+                        await deleteFromCloudinary(teacher.teacher_image);
+                    }
+
+                    // Upload new image to Cloudinary
+                    let filepath = files.image[0].filepath;
+                    const imageUrl = await uploadToCloudinary(filepath, "teacher");
+                    teacher.teacher_image = imageUrl;
+                }
+
+                // Save the updated teacher document
+                await teacher.save();
+                res.status(200).json({ message: "teacher updated successfully", data: teacher });
+            } catch (e) {
+                console.log(e);
+                res.status(500).json({ message: "Error updating teacher details." });
             }
-      
-            // Save the updated teacher document
-            await teacher.save();
-            res.status(200).json({ message: "teacher updated successfully", data: teacher });
-          } catch (e) {
-            console.log(e);
-            res.status(500).json({ message: "Error updating teacher details." });
-          }
-        })
+        });
     },
     deleteTeacherWithId: async(req, res)=>{
         try {
@@ -258,8 +209,7 @@ module.exports = {
 
         try {
             res.header("Authorization",  "");
-            "Authorization"
-            res.status(200).json({success:true, messsage:"Teacher Signed Out  Successfully."})
+            res.status(200).json({success:true, message:"Teacher Signed Out  Successfully."})
         } catch (error) {
             console.log("Error in Sign out", error);
             res.status(500).json({success:false, message:"Server Error in Signing Out. Try later"})

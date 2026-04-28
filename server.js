@@ -7,16 +7,38 @@ const mongoose = require("mongoose");
 const path = require("path");
 
 // ROUTERS
-const schoolRouter = require("./router/school.router")
-const studentRouter = require("./router/student.router")
+const schoolRouter = require("./router/role/school.router")
+const studentRouter = require("./router/role/student.router")
 const classRouter = require("./router/class.router")
 const subjectRouter = require("./router/subject.router")
-const teacherRouter = require('./router/teacher.router')
+const teacherRouter = require('./router/role/teacher.router')
 const examRouter =  require('./router/examination.router')
 const attendanceRoutes = require('./router/attendance.router');
 const periodRoutes = require("./router/period.router");
 const noticeRoutes = require("./router/notice.router");
-const authMiddleware = require("./auth/auth");
+const admissionEnquiryRoutes = require("./router/frontOffice/admissionEnquiry.router");
+const visitorBookRoutes      = require("./router/frontOffice/visitorBook.router");
+const phoneCallLogRoutes     = require("./router/frontOffice/phoneCallLog.router");
+const postalRecordRoutes     = require("./router/frontOffice/postalRecord.router");
+const complaintRoutes        = require("./router/frontOffice/complaint.router");
+const setupRoutes            = require("./router/frontOffice/setup.router");
+const viceAdminRoutes        = require("./router/role/viceAdmin.router");
+const homeworkRoutes = require("./router/homework.router");
+const studyMaterialRoutes = require("./router/studyMaterial.router");
+const leaveRoutes = require("./router/leave.router");
+const transportRoutes = require("./router/transport.router");
+const libraryRoutes = require("./router/library.router");
+const accountantRoutes = require("./router/role/accountant.router");
+const parentRoutes = require("./router/role/parent.router");
+const superAdminRoutes = require("./router/role/superAdmin.router");
+const receptionistRoutes = require("./router/role/receptionist.router");
+const librarianRoutes = require("./router/role/librarian.router");
+const studentAdmissionRoutes = require('./router/studentInformation/studentAdmission.router');
+const studentSettingsRoutes = require('./router/studentInformation/studentSettings.router');
+const onlineAdmissionRoutes = require('./router/studentInformation/onlineAdmission.router');
+const feeCollectionRoutes = require('./router/feeCollections/feeCollection.router');
+const feeDiscountRoutes = require('./router/feeCollections/feeDiscount.router');
+const feeCarryForwardRoutes = require('./router/feeCollections/feeCarryForward.router');
 const { authCheck } = require("./controller/auth.controller");
 
 const app = express();
@@ -58,6 +80,30 @@ app.use('/api/examination', examRouter)
 app.use('/api/attendance', attendanceRoutes)
 app.use('/api/period',  periodRoutes)
 app.use('/api/notices', noticeRoutes)
+app.use('/api/admission-enquiry', admissionEnquiryRoutes)
+app.use('/api/visitor-book',     visitorBookRoutes)
+app.use('/api/phone-call-log',   phoneCallLogRoutes)
+app.use('/api/postal-record',    postalRecordRoutes)
+app.use('/api/complaint',        complaintRoutes)
+app.use('/api/setup',            setupRoutes)
+app.use('/api/vice-admin',       viceAdminRoutes)
+app.use('/api/homework', homeworkRoutes)
+app.use('/api/study-material', studyMaterialRoutes)
+app.use('/api/leave', leaveRoutes)
+app.use('/api/transport', transportRoutes)
+app.use('/api/library', libraryRoutes)
+app.use('/api/accountant', accountantRoutes)
+app.use('/api/parent', parentRoutes)
+app.use('/api/super-admin', superAdminRoutes)
+app.use('/api/receptionist', receptionistRoutes)
+app.use('/api/librarian', librarianRoutes)
+app.use('/api/students', studentAdmissionRoutes)
+app.use('/api/student-settings', studentSettingsRoutes)
+app.use('/api/school/settings', studentSettingsRoutes)
+app.use('/api/school/online-admissions', onlineAdmissionRoutes)
+app.use('/api/fee-collection', feeCollectionRoutes)
+app.use('/api/fee-discounts', feeDiscountRoutes)
+app.use('/api/fee-carry-forward', feeCarryForwardRoutes)
 
 app.get('/api/auth/check',authCheck)
 

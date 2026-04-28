@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const Attendance = require("../model/attendance.model");
-const Student = require("../model/student.model");
+const Student = require("../model/role/student.model");
 const Class = require("../model/class.model");
 const moment = require("moment");
 const {

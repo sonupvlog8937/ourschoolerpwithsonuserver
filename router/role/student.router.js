@@ -1,6 +1,6 @@
 const express = require("express");
-const { getStudentWithQuery, loginStudent,updateStudentWithId,getStudentWithId,signOut,isStudentLoggedIn, getOwnDetails, registerStudent, deleteStudentWithId } = require("../controller/student.controller");
-const authMiddleware = require("../auth/auth");
+const { getStudentWithQuery, loginStudent,updateStudentWithId,getStudentWithId,signOut,isStudentLoggedIn, getOwnDetails, registerStudent, deleteStudentWithId } = require("../../controller/role/student.controller");
+const authMiddleware = require("../../auth/auth");
 const router = express.Router();
 
 router.post('/register',authMiddleware(['SCHOOL']), registerStudent);

@@ -1,7 +1,7 @@
 const express = require("express");
-const { getTeacherWithQuery, loginTeacher,updateTeacherWithId,getTeacherWithId,signOut,isTeacherLoggedIn,  registerTeacher, deleteTeacherWithId ,getTeacherOwnDetails} = require("../controller/teacher.controller");
+const { getTeacherWithQuery, loginTeacher,updateTeacherWithId,getTeacherWithId,signOut,isTeacherLoggedIn,  registerTeacher, deleteTeacherWithId ,getTeacherOwnDetails} = require("../../controller/role/teacher.controller");
 const router = express.Router();
-const authMiddleware = require("../auth/auth");
+const authMiddleware = require("../../auth/auth");
 
 router.post('/register',authMiddleware(['SCHOOL']), registerTeacher);
 router.get("/fetch-with-query",authMiddleware(['SCHOOL']),getTeacherWithQuery);

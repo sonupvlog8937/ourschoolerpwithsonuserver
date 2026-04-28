@@ -1,7 +1,7 @@
 require("dotenv").config();
 
 const Class = require("../model/class.model");
-const Student = require("../model/student.model");
+const Student = require("../model/role/student.model");
 const Exam = require("../model/examination.model");
 const Period = require("../model/period.model");
 module.exports = {

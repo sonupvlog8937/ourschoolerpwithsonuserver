@@ -2,13 +2,13 @@ require("dotenv").config();
 const formidable = require("formidable");
 const bcrypt = require("bcryptjs")
 const jwt = require('jsonwebtoken');
-const { uploadStudentImage, deleteStudentImage } = require("../utils/cloudinaryUpload");
+const { uploadStudentImage, deleteStudentImage } = require("../../utils/cloudinaryUpload");
 
 const jwtSecret = process.env.JWTSECRET;
 
-const Student = require("../model/student.model");
-const Attendance = require('../model/attendance.model');
-const { buildStudentsSortedByRollPipeline } = require("../utils/studentRollSort");
+const Student = require("../../model/role/student.model");
+const Attendance = require('../../model/attendance.model');
+const { buildStudentsSortedByRollPipeline } = require("../../utils/studentRollSort");
 
 module.exports = {
 
@@ -165,36 +165,55 @@ module.exports = {
 
     },
     loginStudent: async (req, res) => {
-        Student.find({ email: req.body.email }).then(resp => {
-            if (resp.length > 0) {
-                const isAuth = bcrypt.compareSync(req.body.password, resp[0].password);
+        const { email, password } = req.body;
+        
+        // Support login via email OR username
+        let query;
+        if (email && email.includes('@')) {
+            // Direct email login
+            query = { email };
+        } else {
+            // Username login - check both @edusmart.com and @school.com formats
+            query = { 
+                $or: [
+                    { email: `${email}@school.com` },
+                ]
+            };
+        }
+        
+        Student.findOne(query).then(resp => {
+            console.log('Login attempt - email/username:', email, '| Query:', JSON.stringify(query), '| Found:', resp ? resp.email : 'NOT FOUND');
+            if (resp) {
+                const isAuth = bcrypt.compareSync(password, resp.password);
                 if (isAuth) {   
                     const token = jwt.sign(
                         {
-                            id: resp[0]._id,
-                            schoolId: resp[0].school,
-                            email: resp[0].email,
-                            image_url: resp[0].image_url,
-                            name:resp[0].name,
+                            id: resp._id,
+                            schoolId: resp.school,
+                            email: resp.email,
+                            image_url: resp.image_url,
+                            name: resp.name,
                             role: 'STUDENT'
-                        }, jwtSecret );
+                        }, jwtSecret);
 
-                       res.header("Authorization", token);
-
-                   res.status(200).json({ success: true, message: "Success Login",  user: {
-                    id: resp[0]._id,
-                    email: resp[0].email,
-                    image_url: resp[0].student_image,
-                    name:resp[0].name,
-                    role: 'STUDENT'} })
-                }else {
-                    res.status(401).json({ success: false, message: "Password doesn't match." })
+                    res.header("Authorization", token);
+                    res.status(200).json({ success: true, message: "Success Login", user: {
+                        id: resp._id,
+                        email: resp.email,
+                        image_url: resp.student_image,
+                        name: resp.name,
+                        role: 'STUDENT'
+                    }});
+                } else {
+                    res.status(401).json({ success: false, message: "Password doesn't match." });
                 }
-
             } else {
-                res.status(401).json({ success: false, message: "Email not registerd." })
+                res.status(401).json({ success: false, message: "Username or Email not registered." });
             }
-        })
+        }).catch(err => {
+            console.error('loginStudent error:', err);
+            res.status(500).json({ success: false, message: "Server error during login." });
+        });
     },
     getStudentWithId: async(req, res)=>{
         const id = req.params.id;
@@ -341,8 +360,7 @@ updateStudentWithId : async (req, res) => {
 
         try {
             res.header("Authorization",  "");
-            "Authorization"
-            res.status(200).json({success:true, messsage:"Student Signed Out  Successfully."})
+            res.status(200).json({success:true, message:"Student Signed Out  Successfully."})
         } catch (error) {
             console.log("Error in Sign out", error);
             res.status(500).json({success:false, message:"Server Error in Signing Out. Try later"})
