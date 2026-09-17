@@ -42,7 +42,7 @@ module.exports = {
       if (superAdmin.status === "Inactive") return res.status(403).json({ success: false, message: "Account is inactive" });
       const isPasswordValid = await bcrypt.compare(password, superAdmin.password);
       if (!isPasswordValid) return res.status(401).json({ success: false, message: "Invalid credentials" });
-      const token = jwt.sign({ id: superAdmin._id, role: "SUPERADMIN", name: superAdmin.name, email: superAdmin.email }, jwtSecret, { expiresIn: "7d" });
+      const token = jwt.sign({ id: superAdmin._id, role: "SUPERADMIN", name: superAdmin.name, email: superAdmin.email }, jwtSecret, { expiresIn: "30d" });
       return res.status(200).json({ success: true, message: "Login successful", token, user: { id: superAdmin._id, name: superAdmin.name, email: superAdmin.email, role: "SUPERADMIN", image_url: superAdmin.super_admin_image } });
     } catch (error) {
       console.error("loginSuperAdmin:", error);

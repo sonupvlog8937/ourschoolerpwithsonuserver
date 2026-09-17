@@ -32,7 +32,7 @@ module.exports = {
       if (librarian.status === "Inactive") return res.status(403).json({ success: false, message: "Account is inactive" });
       const isPasswordValid = await bcrypt.compare(password, librarian.password);
       if (!isPasswordValid) return res.status(401).json({ success: false, message: "Invalid credentials" });
-      const token = jwt.sign({ id: librarian._id, schoolId: librarian.school._id, role: "LIBRARIAN", name: librarian.name, email: librarian.email }, jwtSecret, { expiresIn: "7d" });
+      const token = jwt.sign({ id: librarian._id, schoolId: librarian.school._id, role: "LIBRARIAN", name: librarian.name, email: librarian.email }, jwtSecret, { expiresIn: "30d" });
       return res.status(200).json({ success: true, message: "Login successful", token, user: { id: librarian._id, name: librarian.name, email: librarian.email, role: "LIBRARIAN", school_name: librarian.school.school_name, image_url: librarian.librarian_image } });
     } catch (error) {
       console.error("Error logging in librarian:", error);

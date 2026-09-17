@@ -86,7 +86,7 @@ module.exports = {
           email: parent.email,
         },
         jwtSecret,
-        { expiresIn: "7d" }
+        { expiresIn: "30d" }
       );
 
       res.status(200).json({

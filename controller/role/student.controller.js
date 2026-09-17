@@ -194,7 +194,7 @@ module.exports = {
                             image_url: resp.image_url,
                             name: resp.name,
                             role: 'STUDENT'
-                        }, jwtSecret);
+                        }, jwtSecret, { expiresIn: '30d' });
 
                     res.header("Authorization", token);
                     res.status(200).json({ success: true, message: "Success Login", user: {

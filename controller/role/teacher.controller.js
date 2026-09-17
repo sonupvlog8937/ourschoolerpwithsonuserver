@@ -97,7 +97,8 @@ module.exports = {
                     image_url: resp[0].teacher_image,
                     role: "TEACHER",
                 },
-                jwtSecret
+                jwtSecret,
+                { expiresIn: '30d' }
             );
 
             res.header("Authorization", token);

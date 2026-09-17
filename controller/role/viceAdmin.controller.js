@@ -72,7 +72,7 @@ module.exports = {
           school_name: viceAdmin.school.school_name,
         },
         jwtSecret,
-        { expiresIn: "7d" }
+        { expiresIn: "30d" }
       );
 
       return res.status(200).json({

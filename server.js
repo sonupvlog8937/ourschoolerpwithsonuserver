@@ -39,6 +39,7 @@ const onlineAdmissionRoutes = require('./router/studentInformation/onlineAdmissi
 const feeCollectionRoutes = require('./router/feeCollections/feeCollection.router');
 const feeDiscountRoutes = require('./router/feeCollections/feeDiscount.router');
 const feeCarryForwardRoutes = require('./router/feeCollections/feeCarryForward.router');
+const passwordResetRoutes = require('./router/passwordReset.router');
 const { authCheck } = require("./controller/auth.controller");
 
 const app = express();
@@ -104,6 +105,7 @@ app.use('/api/school/online-admissions', onlineAdmissionRoutes)
 app.use('/api/fee-collection', feeCollectionRoutes)
 app.use('/api/fee-discounts', feeDiscountRoutes)
 app.use('/api/fee-carry-forward', feeCarryForwardRoutes)
+app.use('/api/auth', passwordResetRoutes)
 
 app.get('/api/auth/check',authCheck)
 

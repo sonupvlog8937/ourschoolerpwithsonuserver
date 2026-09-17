@@ -242,7 +242,7 @@ module.exports = {
                             owner_name:resp[0].owner_name,
                             image_url: resp[0].school_image,
                             role:'SCHOOL'
-                        }, jwtSecret );
+                        }, jwtSecret, { expiresIn: '30d' });
 
                    res.header("Authorization", token);
                    res.status(200).json({ success: true, message: "Success Login", 
