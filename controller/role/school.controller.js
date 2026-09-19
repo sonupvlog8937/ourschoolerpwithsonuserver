@@ -217,12 +217,17 @@ module.exports = {
                     owner_name: fields.owner_name[0],
                     address: fields.address ? fields.address[0] : '',
                     password: hashPassword,
-                    school_image: imageUrl
+                    school_image: imageUrl,
+                    status: 'pending'  // ✅ New school registration starts as pending
                 });
 
                 const savedData = await newSchool.save();
                 console.log("Data saved", savedData);
-                res.status(200).json({ success: true, data: savedData, message: "School is Registered Successfully." });
+                res.status(200).json({ 
+                    success: true, 
+                    data: savedData, 
+                    message: "School registration submitted successfully. You will be notified once your application is reviewed by our team." 
+                });
             } catch (e) {
                 console.log("ERROR in Register", e);
                 res.status(500).json({ success: false, message: "Failed Registration." });
@@ -232,6 +237,21 @@ module.exports = {
     loginSchool: async (req, res) => {
         School.find({ email: req.body.email }).then(resp => {
             if (resp.length > 0) {
+                // ✅ Check if school is approved
+                if (resp[0].status === 'pending') {
+                    return res.status(403).json({ 
+                        success: false, 
+                        message: "Your school registration is pending approval. You will be able to login once approved by our team." 
+                    });
+                }
+                
+                if (resp[0].status === 'rejected') {
+                    return res.status(403).json({ 
+                        success: false, 
+                        message: `Your school registration has been rejected. Reason: ${resp[0].rejectionReason || 'Please contact support for more information.'}` 
+                    });
+                }
+
                 const isAuth = bcrypt.compareSync(req.body.password, resp[0].password);
                 if (isAuth) {   
                     const token = jwt.sign(
@@ -346,6 +366,230 @@ module.exports = {
         } catch (error) {
             console.log("Error in isSchoolLoggedIn", error);
             res.status(500).json({success:false, message:"Server Error in School Logged in check. Try later"})
+        }
+    },
+
+    // ─── DASHBOARD STATS ──────────────────────────────────────────────────────────
+    getDashboardStats: async (req, res) => {
+        try {
+            const schoolId = req.user.schoolId;
+
+            // Get today's date range
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            // Import models
+            const StudentAdmission = require('../../model/studentInformation/studentAdmission.model');
+            const Teacher = require('../../model/role/teacher.model');
+            const Attendance = require('../../model/attendance.model');
+            const FeePayment = require('../../model/feeCollections/feePayment.model');
+            const FeeCollection = require('../../model/feeCollections/feeCollection.model');
+            const Complaint = require('../../model/frontOffice/complaint.model');
+            const LibraryBook = require('../../model/library.model');
+            const TransportRoute = require('../../model/transport.model');
+            const Leave = require('../../model/leave.model');
+
+            // Parallel data fetching for better performance
+            const [
+                totalStudents,
+                totalTeachers,
+                todayAttendance,
+                totalAttendanceRecords,
+                todayPayments,
+                feeDueStudents,
+                newAdmissions,
+                complaints,
+                libraryBooks,
+                transportRoutes,
+                studentsWithTransport,
+                genderCounts,
+                staffLeaves
+            ] = await Promise.all([
+                // Total students
+                StudentAdmission.countDocuments({ school: schoolId, status: 'Active' }),
+
+                // Total teachers
+                Teacher.countDocuments({ school: schoolId }),
+
+                // Today's attendance (present)
+                Attendance.countDocuments({ 
+                    school: schoolId, 
+                    date: { $gte: today, $lt: tomorrow },
+                    status: 'Present'
+                }),
+
+                // Total attendance records for today
+                Attendance.countDocuments({ 
+                    school: schoolId, 
+                    date: { $gte: today, $lt: tomorrow }
+                }),
+
+                // Today's fee collection
+                FeePayment.aggregate([
+                    {
+                        $match: {
+                            school: new require('mongoose').Types.ObjectId(schoolId),
+                            paymentDate: { $gte: today, $lt: tomorrow },
+                            isReverted: false
+                        }
+                    },
+                    {
+                        $group: {
+                            _id: null,
+                            total: { $sum: '$amount' }
+                        }
+                    }
+                ]),
+
+                // Students with pending fees
+                FeeCollection.countDocuments({
+                    school: schoolId,
+                    status: { $in: ['Pending', 'Partial'] }
+                }),
+
+                // New admissions (last 30 days)
+                StudentAdmission.countDocuments({
+                    school: schoolId,
+                    admissionDate: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+                }),
+
+                // Open complaints
+                Complaint.countDocuments({
+                    school: schoolId,
+                    status: { $in: ['Open', 'In Progress'] }
+                }),
+
+                // Library books count
+                LibraryBook.countDocuments({ school: schoolId }),
+
+                // Transport routes count
+                TransportRoute.countDocuments({ school: schoolId, status: 'Active' }),
+
+                // Students using transport
+                StudentAdmission.countDocuments({ school: schoolId, transportEnabled: true }),
+
+                // Gender distribution
+                StudentAdmission.aggregate([
+                    { $match: { school: new require('mongoose').Types.ObjectId(schoolId), status: 'Active' } },
+                    {
+                        $group: {
+                            _id: '$gender',
+                            count: { $sum: 1 }
+                        }
+                    }
+                ]),
+
+                // Staff leaves for today
+                Leave.countDocuments({
+                    school: schoolId,
+                    applicant_type: 'Teacher',
+                    status: 'Approved',
+                    from_date: { $lte: today },
+                    to_date: { $gte: today }
+                })
+            ]);
+
+            // Calculate attendance percentage
+            const todayAttendancePercentage = totalAttendanceRecords > 0 
+                ? ((todayAttendance / totalAttendanceRecords) * 100).toFixed(2)
+                : 0;
+
+            // Calculate absent today
+            const absentToday = totalAttendanceRecords - todayAttendance;
+
+            // Today's collection amount
+            const todayCollection = todayPayments.length > 0 ? todayPayments[0].total : 0;
+
+            // Process gender ratio
+            const genderRatio = { boys: 0, girls: 0 };
+            genderCounts.forEach(item => {
+                if (item._id && item._id.toLowerCase() === 'male') {
+                    genderRatio.boys = item.count;
+                } else if (item._id && item._id.toLowerCase() === 'female') {
+                    genderRatio.girls = item.count;
+                }
+            });
+
+            // Get birthdays today (students born on this day/month)
+            const birthdaysToday = await StudentAdmission.countDocuments({
+                school: schoolId,
+                status: 'Active',
+                $expr: {
+                    $and: [
+                        { $eq: [{ $dayOfMonth: '$dateOfBirth' }, today.getDate()] },
+                        { $eq: [{ $month: '$dateOfBirth' }, today.getMonth() + 1] }
+                    ]
+                }
+            });
+
+            // Calculate staff attendance (teachers present = total - on leave)
+            const staffPresent = totalTeachers - staffLeaves;
+            const staffAbsent = 0; // We don't track teacher absent separately
+            const staffLeave = staffLeaves;
+
+            // Calculate fee percentages (total vs collected)
+            const totalFeeData = await FeeCollection.aggregate([
+                { $match: { school: new require('mongoose').Types.ObjectId(schoolId) } },
+                {
+                    $group: {
+                        _id: null,
+                        totalAmount: { $sum: '$amount' },
+                        paidAmount: { $sum: '$paidAmount' }
+                    }
+                }
+            ]);
+
+            const feeCollected = totalFeeData.length > 0 && totalFeeData[0].totalAmount > 0
+                ? ((totalFeeData[0].paidAmount / totalFeeData[0].totalAmount) * 100).toFixed(2)
+                : 0;
+            const feePending = totalFeeData.length > 0 && totalFeeData[0].totalAmount > 0
+                ? (((totalFeeData[0].totalAmount - totalFeeData[0].paidAmount) / totalFeeData[0].totalAmount) * 100).toFixed(2)
+                : 0;
+
+            // Prepare response data
+            const dashboardData = {
+                totalStudents,
+                totalTeachers,
+                totalStaff: totalTeachers, // Assuming teachers = staff for now
+                todayAttendancePercentage: parseFloat(todayAttendancePercentage),
+                todayCollection,
+                absentToday,
+                feeDueStudents,
+                newAdmissions,
+                complaints,
+                birthdays: birthdaysToday,
+                libraryBooks,
+                vehicles: {
+                    routes: transportRoutes,
+                    students: studentsWithTransport
+                },
+                upcomingHolidays: 0, // No holiday model found
+                genderRatio,
+                staffPresent,
+                staffAbsent,
+                staffLeave,
+                feeCollected: parseFloat(feeCollected),
+                feePending: parseFloat(feePending),
+                pendingItems: {
+                    feeDues: feeDueStudents,
+                    complaints,
+                    overdueDocs: 0 // No document tracking found
+                }
+            };
+
+            res.status(200).json({
+                success: true,
+                data: dashboardData
+            });
+
+        } catch (error) {
+            console.log("Error in getDashboardStats", error);
+            res.status(500).json({
+                success: false,
+                message: "Server Error in Getting Dashboard Stats. Try later"
+            });
         }
     }
 }

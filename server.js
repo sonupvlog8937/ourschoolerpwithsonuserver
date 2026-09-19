@@ -40,6 +40,7 @@ const feeCollectionRoutes = require('./router/feeCollections/feeCollection.route
 const feeDiscountRoutes = require('./router/feeCollections/feeDiscount.router');
 const feeCarryForwardRoutes = require('./router/feeCollections/feeCarryForward.router');
 const passwordResetRoutes = require('./router/passwordReset.router');
+const dashboardRoutes = require('./router/dashboard/dashboard.router');
 const { authCheck } = require("./controller/auth.controller");
 
 const app = express();
@@ -106,6 +107,7 @@ app.use('/api/fee-collection', feeCollectionRoutes)
 app.use('/api/fee-discounts', feeDiscountRoutes)
 app.use('/api/fee-carry-forward', feeCarryForwardRoutes)
 app.use('/api/auth', passwordResetRoutes)
+app.use('/api/dashboard', dashboardRoutes)
 
 app.get('/api/auth/check',authCheck)
 

@@ -53,8 +53,9 @@ module.exports = {
   // ── Dashboard Stats ────────────────────────────────────────────────────────
   getDashboardStats: async (req, res) => {
     try {
-      const [totalSchools, totalTeachers, totalStudents, totalAccountants, totalLibrarians, totalReceptionists, totalViceAdmins] = await Promise.all([
+      const [totalSchools, pendingSchools, totalTeachers, totalStudents, totalAccountants, totalLibrarians, totalReceptionists, totalViceAdmins] = await Promise.all([
         School.countDocuments(),
+        School.countDocuments({ status: 'pending' }),
         Teacher.countDocuments(),
         Student.countDocuments(),
         Accountant.countDocuments(),
@@ -66,7 +67,8 @@ module.exports = {
         success: true,
         data: {
           totalSchools,
-          activeSchools: totalSchools,
+          pendingSchools,
+          activeSchools: totalSchools - pendingSchools,
           inactiveSchools: 0,
           totalTeachers,
           totalStudents,
@@ -168,6 +170,123 @@ module.exports = {
       return res.json({ success: true, message: `School status set to ${school.status}`, data: { status: school.status } });
     } catch (error) {
       return res.status(500).json({ success: false, message: "Error toggling school status" });
+    }
+  },
+
+  // ── Get Pending Schools (for approval) ─────────────────────────────────────
+  getPendingSchools: async (req, res) => {
+    try {
+      const { page = 1, limit = 20 } = req.query;
+      const safePage  = Math.max(parseInt(page,  10) || 1, 1);
+      const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+      
+      const [schools, total] = await Promise.all([
+        School.find({ status: 'pending' })
+          .select("-password")
+          .sort({ createdAt: -1 })
+          .skip((safePage - 1) * safeLimit)
+          .limit(safeLimit),
+        School.countDocuments({ status: 'pending' }),
+      ]);
+      
+      return res.json({ 
+        success: true, 
+        data: schools, 
+        pagination: { 
+          total, 
+          page: safePage, 
+          limit: safeLimit, 
+          pages: Math.ceil(total / safeLimit) 
+        } 
+      });
+    } catch (error) {
+      console.error("getPendingSchools:", error);
+      return res.status(500).json({ success: false, message: "Error fetching pending schools", error: error.message });
+    }
+  },
+
+  // ── Approve School Registration ────────────────────────────────────────────
+  approveSchool: async (req, res) => {
+    try {
+      const { schoolId } = req.params;
+      const superAdminId = req.user.id; // From auth middleware
+      
+      const school = await School.findById(schoolId);
+      if (!school) {
+        return res.status(404).json({ success: false, message: "School not found" });
+      }
+      
+      if (school.status !== 'pending') {
+        return res.status(400).json({ 
+          success: false, 
+          message: `School is already ${school.status}. Only pending schools can be approved.` 
+        });
+      }
+      
+      school.status = 'active';
+      school.approvedAt = new Date();
+      school.approvedBy = superAdminId;
+      school.rejectionReason = ''; // Clear any previous rejection reason
+      
+      await school.save();
+      
+      // TODO: Send approval email to school owner
+      // await sendApprovalEmail(school.email, school.school_name);
+      
+      return res.json({ 
+        success: true, 
+        message: "School approved successfully. The school can now login and start using the system.", 
+        data: school 
+      });
+    } catch (error) {
+      console.error("approveSchool:", error);
+      return res.status(500).json({ success: false, message: "Error approving school", error: error.message });
+    }
+  },
+
+  // ── Reject School Registration ─────────────────────────────────────────────
+  rejectSchool: async (req, res) => {
+    try {
+      const { schoolId } = req.params;
+      const { reason } = req.body;
+      
+      if (!reason || reason.trim().length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Rejection reason is required" 
+        });
+      }
+      
+      const school = await School.findById(schoolId);
+      if (!school) {
+        return res.status(404).json({ success: false, message: "School not found" });
+      }
+      
+      if (school.status !== 'pending') {
+        return res.status(400).json({ 
+          success: false, 
+          message: `School is already ${school.status}. Only pending schools can be rejected.` 
+        });
+      }
+      
+      school.status = 'rejected';
+      school.rejectionReason = reason.trim();
+      school.approvedAt = null;
+      school.approvedBy = null;
+      
+      await school.save();
+      
+      // TODO: Send rejection email to school owner
+      // await sendRejectionEmail(school.email, school.school_name, reason);
+      
+      return res.json({ 
+        success: true, 
+        message: "School registration rejected.", 
+        data: school 
+      });
+    } catch (error) {
+      console.error("rejectSchool:", error);
+      return res.status(500).json({ success: false, message: "Error rejecting school", error: error.message });
     }
   },
 };

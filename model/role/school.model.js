@@ -10,6 +10,10 @@ const schoolSchema = new mongoose.Schema({
     state:{type:String, default:''},
     pincode:{type:String, default:''},
     phone:{type:String, default:''},
+    status:{type:String, enum:['pending', 'active', 'rejected'], default:'pending'},
+    rejectionReason:{type:String, default:''},
+    approvedAt:{type:Date, default:null},
+    approvedBy:{type:mongoose.Schema.Types.ObjectId, ref:'SuperAdmin', default:null},
     createdAt:{type:Date, default: new Date()},
 
     password:{type:String, required:true}

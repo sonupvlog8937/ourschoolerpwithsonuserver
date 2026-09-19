@@ -12,6 +12,7 @@ const {
   getAllSchoolsPublic,
   getSchoolDetailsPublic,
   submitOnlineAdmission,
+  getDashboardStats,
 } = require("../../controller/role/school.controller");
 
 const router = express.Router();
@@ -28,6 +29,7 @@ router.get("/all", getAllSchools);
 router.post("/login", loginSchool);
 router.patch("/update",authMiddleware(['SCHOOL']), updateSchoolWithId);
 router.get("/fetch-single",authMiddleware(['SCHOOL']),getSchoolOwnData);
+router.get("/dashboard/stats",authMiddleware(['SCHOOL']), getDashboardStats);
 router.get("/sign-out", signOut);
 router.get("/is-login",  isSchoolLoggedIn)
 
