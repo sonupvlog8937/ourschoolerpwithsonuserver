@@ -2,13 +2,11 @@
 const mongoose = require('mongoose');
 
 const periodSchema = new mongoose.Schema({
-  school:{type:mongoose.Schema.ObjectId, ref:'School'},
-  teacher: {   type: mongoose.Schema.Types.ObjectId,  ref: 'Teacher',   required: true, },
-  subject: { type: mongoose.Schema.Types.ObjectId, ref: 'Subject',  },
-  class: { type: mongoose.Schema.Types.ObjectId, ref: 'Class', required: true,},
-  startTime: { type: Date, required: true,},
-  endTime: { type: Date,  required: true,
-  },
+  school: { type: mongoose.Schema.ObjectId, ref: 'School', required: true },
+  period: { type: String, required: true }, // e.g., "Period 1", "Period 2"
+  startTime: { type: String, required: true }, // e.g., "09:00 AM"
+  endTime: { type: String, required: true }, // e.g., "09:45 AM"
+  status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Period', periodSchema);

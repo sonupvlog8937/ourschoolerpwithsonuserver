@@ -18,7 +18,15 @@ module.exports = {
     },
     createSubject: (req, res) => {
                         const schoolId = req.user.schoolId;
-                        const newSubject = new Subject({...req.body, school:schoolId});
+                        const newSubject = new Subject({
+                            subject_name: req.body.subject_name,
+                            subject_codename: req.body.subject_codename || '',
+                            subject_type: req.body.subject_type || 'theory',
+                            boards: Array.isArray(req.body.boards) ? req.body.boards : [],
+                            optional: Boolean(req.body.optional),
+                            active: req.body.active !== false,
+                            school: schoolId,
+                        });
                         newSubject.save().then(savedData => {
                             console.log("Date saved", savedData);
                             res.status(200).json({ success: true, data: savedData, message:"Subject is Created Successfully." })
@@ -47,9 +55,15 @@ module.exports = {
     // Not providing the  schoolId as subject Id will be unique.
         try {
             let id = req.params.id;
-            console.log(req.body)
-            await Subject.findOneAndUpdate({_id:id},{$set:{...req.body}});
-            const SubjectAfterUpdate =await Subject.findOne({_id:id});
+            const updates = {};
+            if (req.body.subject_name !== undefined) updates.subject_name = req.body.subject_name;
+            if (req.body.subject_codename !== undefined) updates.subject_codename = req.body.subject_codename;
+            if (req.body.subject_type !== undefined) updates.subject_type = req.body.subject_type;
+            if (req.body.boards !== undefined) updates.boards = Array.isArray(req.body.boards) ? req.body.boards : [];
+            if (req.body.optional !== undefined) updates.optional = Boolean(req.body.optional);
+            if (req.body.active !== undefined) updates.active = Boolean(req.body.active);
+            await Subject.findOneAndUpdate({_id:id, school:req.user.schoolId},{$set:updates},{new:true, runValidators:true});
+            const SubjectAfterUpdate =await Subject.findOne({_id:id, school:req.user.schoolId});
             res.status(200).json({success:true, message:"Subject Updated", data:SubjectAfterUpdate})
         } catch (error) {
             

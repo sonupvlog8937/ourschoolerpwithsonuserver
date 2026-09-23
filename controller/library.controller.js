@@ -3,6 +3,102 @@ const BookIssue = require("../model/bookIssue.model");
 const mongoose = require("mongoose");
 
 module.exports = {
+  // Get library dashboard summary
+  getDashboard: async (req, res) => {
+    try {
+      const schoolId = req.user?.schoolId || req.user?.school || req.params?.schoolId;
+
+      if (!schoolId) {
+        return res.status(400).json({
+          success: false,
+          message: "School ID is required to load library dashboard",
+        });
+      }
+
+      let schoolObjectId;
+      try {
+        schoolObjectId = new mongoose.Types.ObjectId(schoolId);
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid school ID format",
+        });
+      }
+
+      const [bookSummary, issueSummary, recentIssues] = await Promise.all([
+        LibraryBook.aggregate([
+          { $match: { school: schoolObjectId } },
+          {
+            $group: {
+              _id: null,
+              totalBooks: { $sum: "$quantity" },
+              availableBooks: { $sum: "$available_quantity" },
+              titleCount: { $sum: 1 },
+            },
+          },
+        ]),
+        BookIssue.aggregate([
+          { $match: { school: schoolObjectId } },
+          {
+            $group: {
+              _id: null,
+              issuedBooks: { $sum: { $cond: [{ $in: ["$status", ["Issued", "Overdue"]] }, 1, 0] } },
+              returnedBooks: { $sum: { $cond: [{ $eq: ["$status", "Returned"] }, 1, 0] } },
+              overdueBooks: { $sum: { $cond: [{ $eq: ["$status", "Overdue"] }, 1, 0] } },
+            },
+          },
+        ]),
+        BookIssue.find({ school: schoolId })
+          .populate("book", "book_title book_number")
+          .populate("member", "name roll_number")
+          .sort({ issue_date: -1 })
+          .limit(5)
+          .lean(),
+      ]);
+
+      const books = bookSummary[0] || { totalBooks: 0, availableBooks: 0, titleCount: 0 };
+      const issues = issueSummary[0] || { issuedBooks: 0, returnedBooks: 0, overdueBooks: 0 };
+
+      res.status(200).json({
+        success: true,
+        data: {
+          totalBooks: books.totalBooks,
+          availableBooks: books.availableBooks,
+          issuedBooks: issues.issuedBooks,
+          returnedBooks: issues.returnedBooks,
+          overdueBooks: issues.overdueBooks,
+          titleCount: books.titleCount,
+          recentIssues,
+          
+          // UI Configuration (Database-driven)
+          uiConfig: {
+            statCards: [
+              { key: 'totalBooks', label: 'Total Books', icon: 'MenuBookIcon', gradient: ['#34d399', '#059669'] },
+              { key: 'issuedBooks', label: 'Books Issued', icon: 'AssignmentReturnIcon', gradient: ['#60a5fa', '#4f46e5'] },
+              { key: 'returnedBooks', label: 'Books Returned', icon: 'CheckCircleIcon', gradient: ['#a78bfa', '#db2777'] },
+              { key: 'overdueBooks', label: 'Overdue', icon: 'WarningIcon', gradient: ['#fb7185', '#f97316'] }
+            ],
+            overview: [
+              { key: 'totalBooks', label: 'Total Books in Library', icon: 'MenuBookIcon', color: '#16b981' },
+              { key: 'issuedBooks', label: 'Currently Issued', icon: 'AssignmentReturnIcon', color: '#1597e5' },
+              { key: 'availableBooks', label: 'Available Books', icon: 'CheckCircleIcon', color: '#16a34a' },
+              { key: 'overdueBooks', label: 'Overdue Books', icon: 'WarningIcon', color: '#ef4444' }
+            ],
+            actions: [
+              { label: 'Issue a Book', description: 'Issue a book to a student or staff member', icon: 'AddIcon', color: '#16a34a', route: '/school/library/books' },
+              { label: 'Issue Log', description: 'View all issued and returned books', icon: 'ViewListIcon', color: '#1597e5', route: '/school/library/books' },
+              { label: 'Add New Book', description: 'Add a new book to the library collection', icon: 'AddIcon', color: '#f59e0b', route: '/school/library/books' },
+              { label: 'Books Report', description: 'Generate and download books reports', icon: 'DownloadIcon', color: '#8b5cf6', route: '/school/library/reports' }
+            ]
+          }
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching library dashboard:", error);
+      res.status(500).json({ success: false, message: "Error fetching library dashboard", error: error.message });
+    }
+  },
+
   // Add book
   addBook: async (req, res) => {
     try {

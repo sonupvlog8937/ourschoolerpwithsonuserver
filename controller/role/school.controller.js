@@ -311,22 +311,32 @@ module.exports = {
                     return res.status(404).json({ message: "School not found." });
                 }
 
-                // Update text fields
+                const editableFields = new Set([
+                    "school_name", "email", "address", "shortName", "affiliationNo", "registrationNo",
+                    "officeNo", "helpNo", "websiteAddress", "facebookLink", "instagramLink", "twitterLink",
+                    "youtubeLink", "registrationDescription", "apiBiometric", "apiBiometricKey",
+                    "apiBiometricSecret", "saturdayWorking", "sundayWorking",
+                ]);
                 Object.keys(fields).forEach((field) => {
-                    school[field] = fields[field][0];
+                    // Skip status field completely to avoid validation errors
+                    if (field === 'status') return;
+                    if (!editableFields.has(field)) return;
+                    const value = fields[field];
+                    school[field] = Array.isArray(value) ? value[0] : value;
                 });
 
-                // Handle image file if provided
-                if (files.image) {
-                    // Delete old image from Cloudinary
-                    if (school.school_image) {
-                        await deleteFromCloudinary(school.school_image);
-                    }
+                const imageFields = ["image", "principalSignature", "dashboardBackground", "boardLogo", "welcomeCard"];
+                for (const field of imageFields) {
+                    if (!files[field]) continue;
+                    const modelField = field === "image" ? "school_image" : field;
+                    if (school[modelField]) await deleteFromCloudinary(school[modelField]);
+                    const uploadedFile = Array.isArray(files[field]) ? files[field][0] : files[field];
+                    school[modelField] = await uploadToCloudinary(uploadedFile.filepath, "school");
+                }
 
-                    // Upload new image to Cloudinary
-                    let filepath = files.image[0].filepath;
-                    const imageUrl = await uploadToCloudinary(filepath, "school");
-                    school.school_image = imageUrl;
+                // Normalize legacy records before Mongoose validates the document.
+                if (typeof school.status === "string") {
+                    school.status = school.status.toLowerCase();
                 }
 
                 // Save the updated school document

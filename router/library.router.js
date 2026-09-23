@@ -4,6 +4,7 @@ const authMiddleware = require("../auth/auth");
 const libraryController = require("../controller/library.controller");
 
 // Book routes
+router.get("/dashboard", authMiddleware(["SCHOOL"]), libraryController.getDashboard);
 router.post("/book/add", authMiddleware(["SCHOOL"]), libraryController.addBook);
 router.get("/book/all", authMiddleware(["SCHOOL", "TEACHER", "STUDENT"]), libraryController.getAllBooks);
 router.get("/book/:id", authMiddleware(["SCHOOL", "TEACHER", "STUDENT"]), libraryController.getBookById);

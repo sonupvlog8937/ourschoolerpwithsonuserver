@@ -18,7 +18,7 @@ module.exports = {
 
     },
     createClass: (req, res) => {
-       const schoolId = req.user.id;
+    const schoolId = req.user.schoolId || req.user.id;
        const newClass = new Class({...req.body,school:schoolId});
        newClass.save().then(savedData => {
            console.log("Date saved", savedData);
@@ -49,8 +49,8 @@ module.exports = {
         try {
             let id = req.params.id;
             console.log(req.body)
-            await Class.findOneAndUpdate({_id:id},{$set:{...req.body}});
-            const ClassAfterUpdate =await Class.findOne({_id:id});
+            await Class.findOneAndUpdate({_id:id, school:req.user.schoolId},{$set:{...req.body}});
+            const ClassAfterUpdate =await Class.findOne({_id:id, school:req.user.schoolId});
             res.status(200).json({success:true, message:"Class Updated", data:ClassAfterUpdate})
         } catch (error) {
             
